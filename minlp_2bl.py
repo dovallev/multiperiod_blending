@@ -51,7 +51,7 @@ def minlp_2bl(SD_flow=False, visualize=False):
     IU_n = {}
     for i in (IU_s, IU_b, IU_d):
         IU_n.update(i)
-        
+
     Fmax = 30
     FL_nn = {nn: 10 for nn in m.A}
     FU_nn = {nn: Fmax for nn in m.A}
@@ -128,7 +128,7 @@ def minlp_2bl(SD_flow=False, visualize=False):
     m.C = pe.Var(m.Q, m.B, m.T, within=pe.NonNegativeReals)
 
     # BINARY VARIABLES
-    m.X = pe.Var(m.A, m.T, within=pe.NonNegativeReals)
+    m.X = pe.Var(m.A, m.T, within=pe.Binary)
 
     # CONSTRAINTS
 
@@ -197,49 +197,48 @@ def minlp_2bl(SD_flow=False, visualize=False):
 
     # Demand inventory balance
     if SD_flow:
-        @m.Constraint(m.D, m.T)  
-        def demand_bal_sd(m,d,t):
-            if t==1:
-                return m.I[d,t] == m.I0_n[d] + sum(m.F[(n,d),t] for n in m.B2) + sum(m.F[(s,d),t] for s in m.S) - m.FD[d,t]
+        @m.Constraint(m.D, m.T)
+        def demand_bal_sd(m, d, t):
+            if t == 1:
+                return m.I[d, t] == m.I0_n[d] + sum(m.F[(n, d), t] for n in m.B2) + sum(m.F[(s, d), t] for s in m.S) - m.FD[d, t]
             else:
-                return m.I[d,t] == m.I[d,t-1] + sum(m.F[(n,d),t] for n in m.B2) + sum(m.F[(s,d),t] for s in m.S) - m.FD[d,t]
+                return m.I[d, t] == m.I[d, t-1] + sum(m.F[(n, d), t] for n in m.B2) + sum(m.F[(s, d), t] for s in m.S) - m.FD[d, t]
     else:
-        @m.Constraint(m.D, m.T)  
-        def demand_bal(m,d,t):
-            if t==1:
-                return m.I[d,t] == m.I0_n[d] + sum(m.F[(n,d),t] for n in m.B2) - m.FD[d,t]
+        @m.Constraint(m.D, m.T)
+        def demand_bal(m, d, t):
+            if t == 1:
+                return m.I[d, t] == m.I0_n[d] + sum(m.F[(n, d), t] for n in m.B2) - m.FD[d, t]
             else:
-                return m.I[d,t] == m.I[d,t-1] + sum(m.F[(n,d),t] for n in m.B2) - m.FD[d,t]
+                return m.I[d, t] == m.I[d, t-1] + sum(m.F[(n, d), t] for n in m.B2) - m.FD[d, t]
 
     # Variable implications
     @m.Constraint(m.B1, m.S, m.B2, m.T)
-    def implication_b1(m,b1,s,b2,t):
-        return m.X[(s,b1),t] + m.X[(b1,b2),t] <= 1
+    def implication_b1(m, b1, s, b2, t):
+        return m.X[(s, b1), t] + m.X[(b1, b2), t] <= 1
 
     @m.Constraint(m.B1, m.D, m.B2, m.T)
-    def implication_b2(m,b1,d,b2,t):
-        return m.X[(b1,b2),t] + m.X[(b2,d),t] <= 1   
+    def implication_b2(m, b1, d, b2, t):
+        return m.X[(b1, b2), t] + m.X[(b2, d), t] <= 1
 
-    # VARIABLE BOUNDS
+    # Bounds
     m.I_bounds = pe.ConstraintList()
     for n in m.N:
         for t in m.T:
-            m.I_bounds.add(m.IL_n[n] <= m.I[n,t])
-            m.I_bounds.add(m.I[n,t] <= m.IU_n[n])
+            m.I_bounds.add(m.IL_n[n] <= m.I[n, t])
+            m.I_bounds.add(m.I[n, t] <= m.IU_n[n])
 
     m.FD_bounds = pe.ConstraintList()
     for d in m.D:
         for t in m.T:
-            m.I_bounds.add(m.FDL_dt[d,t] <= m.FD[d,t])
-            m.I_bounds.add(m.FD[d,t] <= m.FDU_dt[d,t])
+            m.I_bounds.add(m.FDL_dt[d, t] <= m.FD[d, t])
+            m.I_bounds.add(m.FD[d, t] <= m.FDU_dt[d, t])
 
     m.C_bounds = pe.ConstraintList()
     for b in m.B:
         for q in m.Q:
             for t in m.T:
-                m.C_bounds.add(m.CL_q[q] <= m.C[q,b,t])
-                m.C_bounds.add(m.C[q,b,t] <= m.CU_q[q])
-
+                m.C_bounds.add(m.CL_q[q] <= m.C[q, b, t])
+                m.C_bounds.add(m.C[q, b, t] <= m.CU_q[q])
 
     # OBJECTIVE
     if SD_flow:
@@ -285,48 +284,53 @@ def solver(m):
     print('Objective:', round(pe.value(m.obj), 5))
     return m
 
+
 def visualize(m, SD_flow=False):
     x = [1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
     y = [3, 2, 4, 3, 2, 1, 4, 3, 2, 1, 3, 2]
-    pos = {(i+1):(x[i],y[i]) for i in range(len(m.N))}
+    pos = {(i+1): (x[i], y[i]) for i in range(len(m.N))}
 
     for t in m.T:
-        print('Optimal operating flows at the end of period',t, 'are:')
+        print('Optimal operating flows at the end of period', t, 'are:')
         arcs = []
         flows = []
         for nn in m.A:
-            if pe.value(m.F[nn,t]) >= 0.01:
+            if pe.value(m.F[nn, t]) >= 0.01:
                 arcs.append(((nn)))
-                flows.append(round(pe.value(m.F[nn,t]),2))
-                
+                flows.append(round(pe.value(m.F[nn, t]), 2))
+
         graph = nx.DiGraph()
         for i in range(len(arcs)):
-            graph.add_edge(arcs[i][0],arcs[i][1])
-    
-        pairs = list(zip(list(arcs),list(flows)))
+            graph.add_edge(arcs[i][0], arcs[i][1])
+
+        pairs = list(zip(list(arcs), list(flows)))
         edgelabels = dict(pairs)
-        
-        nodelabels = {i:str(i) for i in range(1,len(m.N)+1)}
-        
-        nx.draw_networkx(graph,pos,node_size=700,node_color='skyblue',width=1.5,nodelist=list(range(1,len(m.N)+1)), with_labels=True)
+
+        nodelabels = {i: str(i) for i in range(1, len(m.N)+1)}
+
+        nx.draw_networkx(graph, pos, node_size=700, node_color='skyblue',
+                         width=1.5, nodelist=list(range(1, len(m.N)+1)), with_labels=True)
         nx.draw_networkx_edge_labels(graph, pos, edge_labels=edgelabels)
-        nx.draw_networkx_labels(graph,pos,nodelabels)
+        nx.draw_networkx_labels(graph, pos, nodelabels)
         plt.show()
         if SD_flow:
             for s in m.S:
                 for d in m.D:
-                    if pe.value(m.F[(s,d),t]) >= 0.1:
-                            for q in m.Q:
-                                print('Specification of',q,'that exited through',d,'from',s,'is',round(m.CIN_qs[q,s],3),'and it must be between [',m.CL_qd[q,d],',',m.CU_qd[q,d],']')
+                    if pe.value(m.F[(s, d), t]) >= 0.1:
+                        for q in m.Q:
+                            print('Specification of', q, 'that exited through', d, 'from', s, 'is', round(
+                                m.CIN_qs[q, s], 3), 'and it must be between [', m.CL_qd[q, d], ',', m.CU_qd[q, d], ']')
 
-                
         if t > 1:
             for d in m.D:
                 for b2 in m.B2:
-                    if pe.value(m.F[(b2,d),t]) >= 0.1:
+                    if pe.value(m.F[(b2, d), t]) >= 0.1:
                         for q in m.Q:
-                            print('Specification of',q,'that exited through',d,'from',b2,'is',round(pe.value(m.C[q,b2,t-1],3)),'and it must be between [',m.CL_qd[q,d],',',m.CU_qd[q,d],']')
-        print() 
+                            print('Specification of', q, 'that exited through', d, 'from', b2, 'is', round(pe.value(
+                                m.C[q, b2, t-1], 3)), 'and it must be between [', m.CL_qd[q, d], ',', m.CU_qd[q, d], ']')
+        print()
+
+
 if __name__ == "__main__":
     m = minlp_2bl(SD_flow=False)
     m_solved = solver(m)
