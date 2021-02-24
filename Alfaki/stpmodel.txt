@@ -1,0 +1,107 @@
+$ontext
+    File name: stpmodel.gms.
+    Author: Mohammed Alfaki, December, 2010.
+    GAMS model for the STP-formulation.
+$offtext
+
+#===============================================================================
+# Declare options
+#===============================================================================
+#options optcr=0.01, limrow=0, limcol=0, reslim=3600;
+options optcr=1.e-9, optca=1.e-6, limrow=0, limcol=0, reslim=3600;
+#===============================================================================
+# Declare sets
+#===============================================================================
+     set l(i);
+l(i) = i(i)-s(i)-t(i);
+
+#===============================================================================
+# Declare variables/bounds
+#===============================================================================
+variable cost;
+positive variables f(i,j), y(i,j), x(s,i,t);
+
+f.up(i,j) = min(bu(i),bu(j))*a(i,j);
+y.up(i,j) = a(i,j);
+x.up(s,i,t) = min(bu(s),bu(i),bu(t))*a(s,i)*a(i,t);
+
+#===============================================================================
+# Declare constraints
+#===============================================================================
+equations obj, sflowcaplb(s), sflowcapub(s), pflowcap(i), tflowcaplb(t), 
+          tflowcapub(t), qualub(t,k), spropblnc(i), tpropblnc(i), srlt1(i,t), 
+          trlt1(s,j), srlt2(s,j), trlt2(i,t), spathdef(s,i,t), tpathdef(s,i,t);
+
+#===============================================================================
+# Define constraints
+#===============================================================================
+#-----------------------------Objective function--------------------------------
+obj.. cost =e= sum((s,l,t)$(a(s,l)*a(l,t)>0),(c(s,l) + c(l,t))*x(s,l,t)) +
+                                     sum((s,t)$(a(s,t)>0), c(s,t)*f(s,t));
+#-------------------------Raw material availabilities---------------------------
+sflowcaplb(s)$(bl(s)>0).. sum((l,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                              sum(t$(a(s,t)>0), f(s,t)) =g= bl(s);
+sflowcapub(s)$(bu(s)<+inf).. sum((l,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) +
+                                 sum(t$(a(s,t)>0), f(s,t)) =l= bu(s);
+#-------------------------------Pool capacities---------------------------------
+pflowcap(l)$(bu(l)<+inf).. sum((s,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) =l= bu(l);
+#-------------------------Product demand restrictions---------------------------
+tflowcaplb(t)$(bl(t)>0).. sum((s,l)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                              sum(s$(a(s,t)>0), f(s,t)) =g= bl(t);
+tflowcapub(t)$(bu(t)<+inf).. sum((s,l)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                                 sum(s$(a(s,t)>0), f(s,t)) =l= bu(t);
+#------------------------Product quality specifications-------------------------
+qualub(t,k)$(abs(q(t,k))>0 and abs(q(t,k))<+inf).. 
+                  sum((l,s)$(a(s,l)*a(l,t)>0), (q(s,k) - q(t,k))*x(s,l,t)) + 
+                           sum(s$(a(s,t)>0), (q(s,k) - q(t,k))*f(s,t)) =l= 0;
+#------------------------------Proportion balances------------------------------
+spropblnc(l).. sum(s$(a(s,l)>0), y(s,l)) =e= 1;
+tpropblnc(l).. sum(t$(a(l,t)>0), y(l,t)) =e= 1;
+#--------------------------RLT for proportion balances--------------------------
+srlt1(l,t)$(a(l,t)>0).. sum(s$(a(s,l)>0), x(s,l,t)) =e= f(l,t);
+trlt1(s,l)$(a(s,l)>0).. sum(t$(a(l,t)>0), x(s,l,t)) =e= f(s,l);
+#----------------------------RLT for pool capacities----------------------------
+srlt2(s,l)$(a(s,l)>0 and bu(l)<+inf).. f(s,l) =l= bu(l)*y(s,l);
+trlt2(l,t)$(a(l,t)>0 and bu(l)<+inf).. f(l,t) =l= bu(l)*y(l,t);
+#-----------------------------path flow definition------------------------------
+spathdef(s,l,t)$(a(s,l)*a(l,t)>0).. x(s,l,t) =e= y(s,l)*f(l,t);
+tpathdef(s,l,t)$(a(s,l)*a(l,t)>0).. x(s,l,t) =e= y(l,t)*f(s,l);
+
+#===============================================================================
+# Solve the model
+#===============================================================================
+option nlp = baron;
+model stpmodel /all/;
+$onecho > baron.opt
+#pdo 0
+maxiter -1
+tpropblnc.equclass('*') 1
+trlt1.equclass('*','*') 1
+srlt2.equclass('*','*') 1
+trlt2.equclass('*','*') 1
+tpathdef.equclass('*','*','*') 1
+$offecho
+stpmodel.optfile = 1;
+stpmodel.solprint = 2;
+stpmodel.workspace = 1500;
+solve stpmodel minimizing cost using nlp;
+#============================Print solution information=========================
+scalar nlts;
+nlts = 0;
+loop((s,l,t)$(a(s,l)*a(l,t)>0),
+  nlts = nlts + 2;
+);
+scalars ae, re;
+ae = abs(stpmodel.objest - stpmodel.objval);
+re = ae/abs(stpmodel.objest);
+file line;
+put_utility line 'msg' / '#####' ' Solution Summary #####';
+line.nd = 6;
+line.nw = 18;
+put_utility line 'msg' / stpmodel.objval stpmodel.objest stpmodel.resusd re ae;
+line.nd = 0;
+put_utility line 'msg' / stpmodel.solvestat stpmodel.nodusd (stpmodel.numvar-1) 
+nlts (stpmodel.numequ-nlts-1) nlts;
+option f:6:0:2;display f.l;
+option y:6:0:2;display y.l;
+#========================================END====================================

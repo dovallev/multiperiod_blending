@@ -1,0 +1,62 @@
+$ontext
+    RT2 pooling problem data.
+    Author: Mohammed Alfaki, Wed Nov  9 15:36:08 2011
+$offtext
+
+$eolcom #
+
+# Declare sets
+    set i    / 1*8  /;
+    set s(i) / 1*3  /;
+    set t(i) / 6*8  /;
+    set k    / 1*8  /;
+
+alias (i,j);
+
+# The arc unit cost c_{ij}
+table c(i,j)
+          4       5       6       7       8
+  1   49.20   49.20    0.00 -180.80    0.00
+  2   62.00   62.00 -128.00    0.00  -88.00
+  3  300.00  300.00  110.00    0.00    0.00
+  4    0.00    0.00 -190.00 -230.00 -150.00
+  5    0.00    0.00 -190.00 -230.00 -150.00 ;
+
+# The adjacency matrix (the arcs set A)
+table a(i,j)
+      4   5   6   7   8
+  1   1   1   0   1   0
+  2   1   1   1   0   1
+  3   1   1   1   0   0
+  4   0   0   1   1   1
+  5   0   0   1   1   1 ;
+
+# Source qualities/terminal quality upper bounds
+table q(i,k)
+          1       2       3       4       5       6       7       8
+  1    0.82    3.00   99.20   90.50   -0.82   -3.00  -99.20  -90.50
+  2    0.62    0.00   87.90   83.50   -0.62    0.00  -87.90  -83.50
+  3    0.75    0.00  114.00   98.70   -0.75    0.00 -114.00  -98.70
+  6    0.79    3.00  114.00   98.70   -0.74    0.00  -95.00  -85.00
+  7    0.79    0.90  114.00   98.70   -0.74    0.00  -96.00  -88.00
+  8    0.79    3.00  114.00   98.70   -0.74    0.00  -91.00  -83.50 ;
+
+# Node capacity lower bound
+parameter bl(i) /  1     0.00
+                   2     0.00
+                   3     0.00
+                   6     5.00
+                   7     5.00
+                   8     5.00 / ;
+
+# Node capacity upper bound
+parameter bu(i) /  1    60.98
+                   2   161.29
+                   3     5.00
+                   4    12.50
+                   5    17.50
+                   6   300.00
+                   7   300.00
+                   8   300.00 / ;
+
+$include xmodel.gms

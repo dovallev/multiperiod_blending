@@ -1,0 +1,101 @@
+$ontext
+    File name: tpmodel.gms.
+    Author: Mohammed Alfaki, December, 2010.
+    GAMS model for the TP-formulation.
+$offtext
+
+#===============================================================================
+# Declare options
+#===============================================================================
+#options optcr=0.01, limrow=0, limcol=0, reslim=3600;
+options optcr=1.e-9, optca=1.e-6, limrow=0, limcol=0, reslim=3600;
+#===============================================================================
+# Declare sets
+#===============================================================================
+     set l(i);
+l(i) = i(i)-s(i)-t(i);
+
+#===============================================================================
+# Declare variables/bounds
+#===============================================================================
+variable cost;
+positive variables y(i,t), x(s,i,t), f(s,i);
+
+y.up(i,t) = a(i,t);
+x.up(s,i,t) = min(bu(s),bu(i),bu(t))*a(s,i)*a(i,t);
+f.up(s,i) = min(bu(s),bu(i))*a(s,i);
+
+#===============================================================================
+# Declare constraints
+#===============================================================================
+equations obj, sflowcaplb(s), sflowcapub(s), pflowcap(i), tflowcaplb(t), 
+          tflowcapub(t), qualub(t,k), propblnc(i), rlt1(s,j), rlt2(i,t), 
+          pathdef(s,i,t);
+
+#===============================================================================
+# Define constraints
+#===============================================================================
+#-----------------------------Objective function--------------------------------
+obj.. cost =e= sum((s,l,t)$(a(s,l)*a(l,t)>0),(c(s,l) + c(l,t))*x(s,l,t)) +
+                                     sum((s,t)$(a(s,t)>0), c(s,t)*f(s,t));
+#-------------------------Raw material availabilities---------------------------
+sflowcaplb(s)$(bl(s)>0).. sum((l,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                              sum(t$(a(s,t)>0), f(s,t)) =g= bl(s);
+sflowcapub(s)$(bu(s)<+inf).. sum((l,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) +
+                                 sum(t$(a(s,t)>0), f(s,t)) =l= bu(s);
+#-------------------------------Pool capacities---------------------------------
+pflowcap(l)$(bu(l)<+inf).. sum((s,t)$(a(s,l)*a(l,t)>0), x(s,l,t)) =l= bu(l);
+#-------------------------Product demand restrictions---------------------------
+tflowcaplb(t)$(bl(t)>0).. sum((s,l)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                              sum(s$(a(s,t)>0), f(s,t)) =g= bl(t);
+tflowcapub(t)$(bu(t)<+inf).. sum((s,l)$(a(s,l)*a(l,t)>0), x(s,l,t)) + 
+                                 sum(s$(a(s,t)>0), f(s,t)) =l= bu(t);
+#------------------------Product quality specifications-------------------------
+qualub(t,k)$(abs(q(t,k))>0 and abs(q(t,k))<+inf).. 
+                  sum((l,s)$(a(s,l)*a(l,t)>0), (q(s,k) - q(t,k))*x(s,l,t)) + 
+                           sum(s$(a(s,t)>0), (q(s,k) - q(t,k))*f(s,t)) =l= 0;
+#------------------------------Proportion balances------------------------------
+propblnc(l).. sum(t$(a(l,t)>0), y(l,t)) =e= 1;
+#--------------------------RLT for proportion balances--------------------------
+rlt1(s,l)$(a(s,l)>0).. sum(t$(a(l,t)>0), x(s,l,t)) =e= f(s,l);
+#----------------------------RLT for pool capacities----------------------------
+rlt2(l,t)$(a(l,t)>0 and bu(l)<+inf).. sum(s$(a(s,l)>0), x(s,l,t)) =l= 
+                                                        bu(l)*y(l,t);
+#-----------------------------path flow definition------------------------------
+pathdef(s,l,t)$(a(s,l)*a(l,t)>0).. x(s,l,t) =e= y(l,t)*f(s,l);
+
+#===============================================================================
+# Solve the model
+#===============================================================================
+option nlp = baron;
+model tpmodel /all/;
+$onecho > baron.opt
+#pdo 0
+maxiter -1
+rlt1.equclass('*','*') 1
+rlt2.equclass('*','*') 1
+$offecho
+tpmodel.optfile = 1;
+tpmodel.solprint = 2;
+tpmodel.workspace = 1500;
+solve tpmodel minimizing cost using nlp;
+#============================Print solution information=========================
+scalar nlts;
+nlts = 0;
+loop((s,l,t)$(a(s,l)*a(l,t)>0),
+  nlts = nlts + 1;
+);
+scalars ae, re;
+ae = abs(tpmodel.objest - tpmodel.objval);
+re = ae/abs(tpmodel.objest);
+file line;
+put_utility line 'msg' / '#####' ' Solution Summary #####';
+line.nd = 6;
+line.nw = 18;
+put_utility line 'msg' / tpmodel.objval tpmodel.objest tpmodel.resusd re ae;
+line.nd = 0;
+put_utility line 'msg' / tpmodel.solvestat tpmodel.nodusd (tpmodel.numvar-1) 
+nlts (tpmodel.numequ-nlts-1) nlts;
+option f:6:0:2;display f.l;
+option y:6:0:2;display y.l;
+#========================================END====================================
