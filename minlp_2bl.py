@@ -5,6 +5,7 @@ from pyomo.core.base.misc import display
 from pyomo.opt.base.solvers import SolverFactory
 import os
 
+# Change to abstract 
 
 def minlp_2bl(SD_flow=False, visualize=False):
     # PYOMO MODEL
